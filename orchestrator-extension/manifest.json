@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Node.js Process Orchestrator",
+  "version": "1.0.0",
+  "description": "Execute and halt local Node.js processes.",
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "host_permissions": [
+    "http://localhost:8080/*"
+  ]
+}
