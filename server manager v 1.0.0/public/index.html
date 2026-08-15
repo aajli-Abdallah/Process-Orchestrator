@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Node.js Process Orchestrator</title>
+    <style>
+        :root {
+            --bg-color: #050505;
+            --surface: #121212;
+            --border: #2a2a2a;
+            --text-main: #ededed;
+            --text-muted: #888888;
+            --accent: #3273f6;
+            --accent-hover: #1d5ce0;
+            --success: #10b981;
+            --danger: #ef4444;
+            --font-mono: 'Consolas', 'Courier New', monospace;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: var(--font-mono);
+            margin: 0;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h2 {
+            font-size: 1.2rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .control-panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 1.5rem;
+            display: grid;
+            grid-template-columns: 2fr 3fr 1fr auto;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+
+        input {
+            background: var(--bg-color);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 0.75rem 1rem;
+            font-family: var(--font-mono);
+            border-radius: 4px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input:focus {
+            border-color: var(--accent);
+        }
+
+        button {
+            background: var(--surface);
+            color: var(--text-main);
+            border: 1px solid var(--border);
+            padding: 0.5rem 1rem;
+            font-family: var(--font-mono);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 1px;
+        }
+
+        button.primary {
+            background: var(--accent);
+            border-color: var(--accent);
+            font-weight: bold;
+        }
+
+        button:hover {
+            background: var(--border);
+        }
+
+        button.primary:hover {
+            background: var(--accent-hover);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+
+        th, td {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border);
+            text-align: left;
+        }
+
+        th {
+            background: #0a0a0a;
+            color: var(--text-muted);
+            font-weight: normal;
+            text-transform: uppercase;
+            font-size: 0.8rem;
+            letter-spacing: 1px;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover td {
+            background: #181818;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .running .status-indicator {
+            background: var(--success);
+            box-shadow: 0 0 8px var(--success);
+        }
+        
+        .stopped .status-indicator {
+            background: var(--danger);
+            box-shadow: 0 0 8px var(--danger);
+        }
+
+        .running { color: var(--success); }
+        .stopped { color: var(--danger); }
+
+        .port-input {
+            width: 80px;
+            padding: 0.4rem;
+            background: transparent;
+            border: 1px dashed var(--border);
+            text-align: center;
+        }
+
+        .endpoint-link {
+            display: inline-flex;
+            align-items: center;
+            color: var(--accent);
+            text-decoration: none;
+            padding: 0.4rem 0.8rem;
+            border: 1px solid var(--accent);
+            border-radius: 4px;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+        }
+
+        .endpoint-link:hover {
+            background: rgba(50, 115, 246, 0.1);
+        }
+
+        .endpoint-disabled {
+            display: inline-flex;
+            align-items: center;
+            color: var(--text-muted);
+            padding: 0.4rem 0.8rem;
+            border: 1px dashed var(--border);
+            border-radius: 4px;
+            font-size: 0.9rem;
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        .action-group {
+            display: flex;
+            gap: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Process Orchestrator</h2>
+        
+        <div class="control-panel">
+            <input type="text" id="name" placeholder="Process Identifier (e.g. DATA_API)">
+            <input type="text" id="script" placeholder="Execution Path (e.g. C:/api/server.js)">
+            <input type="number" id="port" placeholder="Port">
+            <button class="primary" onclick="addServer()">Deploy Process</button>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Identifier</th>
+                    <th>Target Execution Path</th>
+                    <th>Binding Port</th>
+                    <th>Endpoint Access</th>
+                    <th>Process State</th>
+                    <th>Subprocess Control</th>
+                </tr>
+            </thead>
+            <tbody id="serverList"></tbody>
+        </table>
+    </div>
+
+    <script>
+        const fetchServers = async () => {
+            const res = await fetch('/api/servers');
+            const data = await res.json();
+            document.getElementById('serverList').innerHTML = data.map(s => {
+                const isRunning = s.status === 'running';
+                
+                // Construct the direct DOM anchor link dynamically based on process state
+                const linkUI = isRunning 
+                    ? `<a href="http://localhost:${s.port}" target="_blank" class="endpoint-link">↗ localhost:${s.port}</a>`
+                    : `<span class="endpoint-disabled">Offline</span>`;
+
+                const controlUI = isRunning
+                    ? `<button onclick="exec('${s.id}', 'stop')">Halt</button>`
+                    : `<button onclick="exec('${s.id}', 'start')">Execute</button>`;
+
+                return `
+                <tr>
+                    <td style="font-weight: bold; color: var(--text-main);">${s.name}</td>
+                    <td style="color: var(--text-muted);">${s.scriptPath}</td>
+                    <td>
+                        <input type="number" class="port-input" value="${s.port}" onchange="updatePort('${s.id}', this.value)">
+                    </td>
+                    <td>${linkUI}</td>
+                    <td class="${s.status}">
+                        <span class="status-indicator"></span>${s.status.toUpperCase()}
+                    </td>
+                    <td>
+                        <div class="action-group">
+                            ${controlUI}
+                            <button onclick="deleteServer('${s.id}')" style="border-color: var(--danger); color: var(--danger);">Purge</button>
+                        </div>
+                    </td>
+                </tr>
+                `;
+            }).join('');
+        };
+
+        const addServer = async () => {
+            await fetch('/api/servers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: document.getElementById('name').value,
+                    scriptPath: document.getElementById('script').value,
+                    port: document.getElementById('port').value
+                })
+            });
+            fetchServers();
+        };
+
+        const updatePort = async (id, port) => {
+            await fetch(`/api/servers/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ port })
+            });
+            fetchServers();
+        };
+
+        const exec = async (id, action) => {
+            await fetch(`/api/servers/${id}/${action}`, { method: 'POST' });
+            fetchServers();
+        };
+
+        const deleteServer = async (id) => {
+            await fetch(`/api/servers/${id}`, { method: 'DELETE' });
+            fetchServers();
+        };
+
+        fetchServers();
+        setInterval(fetchServers, 3000);
+    </script>
+</body>
+</html>

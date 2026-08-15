@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Node Manager</title>
+    <style>
+        body { font-family: monospace; max-width: 900px; margin: 2rem auto; background: #121212; color: #e0e0e0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        th, td { padding: 0.75rem; border: 1px solid #333; text-align: left; }
+        .running { color: #4caf50; font-weight: bold; }
+        .stopped { color: #f44336; font-weight: bold; }
+        input, button { padding: 0.5rem; background: #2c2c2c; color: #e0e0e0; border: 1px solid #555; }
+        button { cursor: pointer; }
+        button:hover { background: #3c3c3c; }
+        .panel { padding: 1rem; border: 1px solid #333; margin-bottom: 2rem; background: #1e1e1e; }
+    </style>
+</head>
+<body>
+    <h2>Process Controller</h2>
+    
+    <div class="panel">
+        <input type="text" id="name" placeholder="Name (e.g., API_V1)">
+        <input type="text" id="script" placeholder="Absolute Path (C:/app/server.js)">
+        <input type="number" id="port" placeholder="Port">
+        <button onclick="addServer()">Deploy Server</button>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID / Name</th>
+                <th>Target Script</th>
+                <th>Port Allocation</th>
+                <th>State</th>
+                <th>Execution</th>
+            </tr>
+        </thead>
+        <tbody id="serverList"></tbody>
+    </table>
+
+    <script>
+        const fetchServers = async () => {
+            const res = await fetch('/api/servers');
+            const data = await res.json();
+            document.getElementById('serverList').innerHTML = data.map(s => `
+                <tr>
+                    <td>${s.name}</td>
+                    <td>${s.scriptPath}</td>
+                    <td>
+                        <input type="number" value="${s.port}" style="width:80px" onchange="updatePort('${s.id}', this.value)">
+                    </td>
+                    <td class="${s.status}">${s.status.toUpperCase()}</td>
+                    <td>
+                        ${s.status === 'stopped' 
+                            ? `<button onclick="exec('${s.id}', 'start')">Start</button>` 
+                            : `<button onclick="exec('${s.id}', 'stop')">Stop</button>`}
+                        <button onclick="deleteServer('${s.id}')">Delete</button>
+                    </td>
+                </tr>
+            `).join('');
+        };
+
+        const addServer = async () => {
+            await fetch('/api/servers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: document.getElementById('name').value,
+                    scriptPath: document.getElementById('script').value,
+                    port: document.getElementById('port').value
+                })
+            });
+            fetchServers();
+        };
+
+        const updatePort = async (id, port) => {
+            await fetch(`/api/servers/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ port })
+            });
+            fetchServers();
+        };
+
+        const exec = async (id, action) => {
+            await fetch(`/api/servers/${id}/${action}`, { method: 'POST' });
+            fetchServers();
+        };
+
+        const deleteServer = async (id) => {
+            await fetch(`/api/servers/${id}`, { method: 'DELETE' });
+            fetchServers();
+        };
+
+        fetchServers();
+        setInterval(fetchServers, 3000); // UI polling
+    </script>
+</body>
+</html>
